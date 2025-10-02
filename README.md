@@ -7,7 +7,10 @@
 docker-compose up -d
 ```
 
-### 2. Use the module
+### 2. Open Jupyter Notebooks
+Open **http://localhost:8888** in your browser
+
+### 3. Use the module
 ```python
 from db_connection import connect_to_database
 
