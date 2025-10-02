@@ -1,148 +1,75 @@
 """
-Database connection helper for SQL Server
-Provides easy connection management for data analysis tasks
+Simple SQL Server database connection module.
+Only used for connecting and reading data. Does NOT create/modify/delete databases.
 """
 
 import os
 import pymssql
-import pandas as pd
-from sqlalchemy import create_engine
-import time
-from typing import Optional, Any, Dict
 
 
-class SQLServerConnection:
-    """Helper class for managing SQL Server connections"""
-    
-    def __init__(self, 
-                 server: str = None, 
-                 port: int = None,
-                 user: str = None, 
-                 password: str = None, 
-                 database: str = None):
-        """
-        Initialize connection parameters
-        Uses environment variables as defaults if not provided
-        """
-        self.server = server or os.getenv('DB_SERVER', 'sqlserver')
-        self.port = port or int(os.getenv('DB_PORT', '1433'))
-        self.user = user or os.getenv('DB_USER', 'sa')
-        self.password = password or os.getenv('DB_PASSWORD', 'YourStrong!Passw0rd')
-        self.database = database or os.getenv('DB_NAME', 'ShopDB')
-        
-        self.connection = None
-        self.engine = None
-    
-    def connect(self, max_retries: int = 10, retry_delay: int = 5) -> bool:
-        """
-        Establish connection to SQL Server with retry logic
-        Returns True if successful, False otherwise
-        """
-        for attempt in range(max_retries):
-            try:
-                self.connection = pymssql.connect(
-                    server=self.server,
-                    port=self.port,
-                    user=self.user,
-                    password=self.password,
-                    database=self.database,
-                    autocommit=True
-                )
-                print(f"✅ Connected to SQL Server: {self.server}:{self.port}/{self.database}")
-                return True
-            except pymssql.OperationalError as e:
-                print(f"❌ Connection attempt {attempt + 1}/{max_retries} failed: {e}")
-                if attempt < max_retries - 1:
-                    print(f"⏳ Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-        
-        print("❌ Failed to connect to SQL Server after all retries")
-        return False
-    
-    def get_sqlalchemy_engine(self):
-        """Get SQLAlchemy engine for pandas integration"""
-        if not self.engine:
-            connection_string = (
-                f"mssql+pymssql://{self.user}:{self.password}@"
-                f"{self.server}:{self.port}/{self.database}"
-            )
-            self.engine = create_engine(connection_string)
-        return self.engine
-    
-    def execute_query(self, query: str) -> list:
-        """Execute a query and return results"""
-        if not self.connection:
-            raise Exception("Not connected to database. Call connect() first.")
-        
-        cursor = self.connection.cursor()
-        cursor.execute(query)
-        results = cursor.fetchall()
-        cursor.close()
-        return results
-    
-    def query_to_dataframe(self, query: str) -> pd.DataFrame:
-        """Execute query and return results as pandas DataFrame"""
-        engine = self.get_sqlalchemy_engine()
-        return pd.read_sql(query, engine)
-    
-    def get_table_info(self, table_name: str = None) -> pd.DataFrame:
-        """Get information about tables in the database"""
-        if table_name:
-            query = f"""
-            SELECT 
-                COLUMN_NAME,
-                DATA_TYPE,
-                IS_NULLABLE,
-                COLUMN_DEFAULT
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME = '{table_name}'
-            ORDER BY ORDINAL_POSITION
-            """
+def connect_to_database(database_name: str,
+                       username: str = None,
+                       password: str = None,
+                       server: str = None,
+                       port: int = None):
+    """
+    Connect to SQL Server database.
+
+    Args:
+        database_name (str): Database name to connect to (required)
+        username (str): SQL Server username (defaults to .env)
+        password (str): SQL Server password (defaults to .env)
+        server (str): Server address (defaults to .env)
+        port (int): Connection port (defaults to .env)
+
+    Returns:
+        pymssql.Connection: Database connection object
+
+    Raises:
+        Exception: If unable to connect to database
+    """
+    if not database_name:
+        raise ValueError("database_name is a required parameter")
+
+    # Read configuration from .env if not provided
+    server = server or os.getenv('DB_SERVER', 'sqlserver')
+    port = port or int(os.getenv('DB_PORT', '1433'))
+    username = username or os.getenv('DB_USER', 'sa')
+    password = password or os.getenv('DB_PASSWORD', 'YourStrong!Passw0rd')
+
+    print(f"[INFO] Connecting to database: {database_name}")
+    print(f"[INFO] Server: {server}:{port}")
+    print(f"[INFO] User: {username}")
+
+    try:
+        # Create connection to SQL Server
+        connection = pymssql.connect(
+            server=server,
+            port=port,
+            user=username,
+            password=password,
+            database=database_name,
+            timeout=30,
+            login_timeout=30
+        )
+
+        print(f"[OK] Successfully connected to database: {database_name}")
+        return connection
+
+    except pymssql.OperationalError as e:
+        error_msg = str(e)
+        if "Cannot open database" in error_msg or "does not exist" in error_msg:
+            print(f"[ERROR] Database '{database_name}' does not exist")
+            print("[INFO] Please create database using Azure Data Studio:")
+            print(f"[INFO]    CREATE DATABASE {database_name};")
+        elif "Login failed" in error_msg:
+            print(f"[ERROR] Login failed - check username/password")
         else:
-            query = """
-            SELECT 
-                TABLE_NAME,
-                TABLE_TYPE
-            FROM INFORMATION_SCHEMA.TABLES 
-            WHERE TABLE_TYPE = 'BASE TABLE'
-            ORDER BY TABLE_NAME
-            """
-        
-        return self.query_to_dataframe(query)
-    
-    def close(self):
-        """Close the database connection"""
-        if self.connection:
-            self.connection.close()
-            print("🔌 Database connection closed")
+            print(f"[ERROR] Connection error: {error_msg}")
+        raise Exception(f"Unable to connect to database '{database_name}': {error_msg}")
+
+    except Exception as e:
+        print(f"[ERROR] Unknown error: {e}")
+        raise Exception(f"Database connection error: {e}")
 
 
-# Convenience function for quick connections
-def get_db_connection() -> SQLServerConnection:
-    """Get a database connection using environment variables"""
-    db = SQLServerConnection()
-    if db.connect():
-        return db
-    else:
-        raise Exception("Failed to connect to database")
-
-
-# Example usage
-if __name__ == "__main__":
-    # Test the connection
-    db = SQLServerConnection()
-    
-    if db.connect():
-        # Show available tables
-        print("\n📊 Available tables:")
-        tables = db.get_table_info()
-        print(tables)
-        
-        # Example query
-        print("\n👥 Sample customers data:")
-        customers = db.query_to_dataframe("SELECT TOP 5 * FROM Customers")
-        print(customers)
-        
-        db.close()
-    else:
-        print("Failed to establish database connection")

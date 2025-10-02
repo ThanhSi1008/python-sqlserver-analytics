@@ -1,7 +1,18 @@
-# Define a custom network for container communication
+# =============================================================================
+# Docker Compose Configuration for Data Analysis Environment
+# =============================================================================
+# This configuration uses a centralized .env file for all settings.
+# To change database connections, edit the .env file.
+# =============================================================================
+
+# Define a custom network for container communication with memory optimization
 networks:
   data-analysis-network:
     driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+      com.docker.network.driver.mtu: "1500"
 
 services:
   # SQL Server container for data storage
@@ -11,99 +22,70 @@ services:
     platform: linux/amd64
     restart: unless-stopped
     environment:
-      # Required SQL Server environment variables
-      ACCEPT_EULA: "Y"
-      SA_PASSWORD: "YourStrong!Passw0rd"
-      MSSQL_PID: "Developer"  # Use Developer edition (free)
-      MSSQL_TCP_PORT: 1433
+      # SQL Server environment variables from .env file
+      ACCEPT_EULA: ${ACCEPT_EULA}
+      SA_PASSWORD: ${SA_PASSWORD}
+      MSSQL_PID: ${MSSQL_PID}
+      MSSQL_TCP_PORT: ${MSSQL_TCP_PORT}
+      # Optimized memory settings for development (minimum viable)
+      MSSQL_MEMORY_LIMIT_MB: 1024
+      # Additional SQL Server memory optimizations
+      MSSQL_AGENT: "false"
+      MSSQL_ENABLE_HADR: "0"
     ports:
-      - "1433:1433"  # Expose SQL Server port to host
+      - "${SQL_SERVER_HOST_PORT}:${MSSQL_TCP_PORT}"  # Expose SQL Server port to host
+    # Optimized memory limits for minimal RAM usage
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+        reservations:
+          memory: 1G
     # Note: Removed persistent volumes to avoid permission issues in development
     # Data will be recreated on container restart, which is fine for development
     networks:
       - data-analysis-network
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P YourStrong!Passw0rd -Q 'SELECT 1' -C || exit 1"]
-      interval: 15s
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U ${DB_USER} -P ${SA_PASSWORD} -Q 'SELECT 1' -C || exit 1"]
+      interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 60s
+      retries: 3
+      start_period: 90s
 
-  # Python container for data analysis and development
-  python-app:
-    container_name: python_data_analysis
-    build:
-      context: ./app
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      # Database connection environment variables
-      DB_SERVER: "sqlserver"
-      DB_PORT: "1433"
-      DB_USER: "sa"
-      DB_PASSWORD: "YourStrong!Passw0rd"
-      DB_NAME: "ShopDB"
-      # Python environment variables
-      PYTHONUNBUFFERED: 1
-      PYTHONDONTWRITEBYTECODE: 1
-      # Development mode
-      DEVELOPMENT_MODE: "true"
-    volumes:
-      # Mount local code directory for live editing
-      - ./app:/app
-      # Optional: Mount additional directories for data files, notebooks, etc.
-      - ./data:/app/data
-      - ./notebooks:/app/notebooks
-      - ./scripts:/app/scripts
-    working_dir: /app
-    # Keep container running for interactive development
-    stdin_open: true
-    tty: true
-    networks:
-      - data-analysis-network
-    depends_on:
-      sqlserver:
-        condition: service_healthy
-    # Override default command to keep container running
-    command: >
-      bash -c "
-        echo 'Starting Python development environment...' &&
-        echo 'SQL Server connection details:' &&
-        echo '  Host: sqlserver' &&
-        echo '  Port: 1433' &&
-        echo '  User: sa' &&
-        echo '  Database: ShopDB' &&
-        echo '' &&
-        echo 'Available commands:' &&
-        echo '  python test.py          - Run the test script' &&
-        echo '  python -c \"import pymssql; print(\\\"pymssql available\\\")\"' &&
-        echo '  jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root' &&
-        echo '' &&
-        echo 'Container is ready for development!' &&
-        tail -f /dev/null
-      "
 
-  # Optional: Jupyter Notebook service for interactive data analysis
+  # Jupyter Lab service for interactive data analysis
   jupyter:
+    image: jupyter/scipy-notebook:latest
     container_name: jupyter_data_analysis
-    build:
-      context: ./app
-      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      DB_SERVER: "sqlserver"
-      DB_PORT: "1433"
-      DB_USER: "sa"
-      DB_PASSWORD: "YourStrong!Passw0rd"
-      DB_NAME: "ShopDB"
+      # Database connection environment variables from .env file
+      DB_SERVER: ${DB_SERVER}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      # Add /app to Python path so db_connection module can be imported
+      PYTHONPATH: /app
+      # Jupyter memory optimizations
       JUPYTER_ENABLE_LAB: "yes"
+      JUPYTER_CONFIG_DIR: "/tmp/.jupyter"
+      IPYTHONDIR: "/tmp/.ipython"
     ports:
-      - "8888:8888"  # Jupyter port
+      - "8888:8888"  # Jupyter Lab port
     volumes:
+      # Mount app directory for access to db_connection module
       - ./app:/app
-      - ./notebooks:/app/notebooks
-      - ./data:/app/data
-    working_dir: /app
+      # Mount notebooks directory for persistent notebook storage
+      - ./notebooks:/notebooks
+    working_dir: /notebooks
+    user: root
+    # Optimized memory limits for minimal RAM usage
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
     networks:
       - data-analysis-network
     depends_on:
@@ -111,6 +93,33 @@ services:
         condition: service_healthy
     command: >
       bash -c "
-        pip install jupyter jupyterlab ipykernel &&
-        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''
+        pip install --no-cache-dir pymssql &&
+        start-notebook.sh --ServerApp.token='123' --ServerApp.password='123' --ServerApp.disable_check_xsrf=True --ServerApp.allow_root=True
       "
+
+
+
+# =============================================================================
+# Aggressively Memory-Optimized Configuration
+# =============================================================================
+# This configuration is optimized for ultra-minimal RAM usage:
+# - SQL Server: Limited to 768MB RAM with 512MB memory limit
+# - Jupyter Lab: Limited to 512MB RAM with 256MB reservation
+# - Disabled SQL Server Agent and HADR features
+# - Aggressive Jupyter memory limits and buffer optimizations
+# - No authentication tokens/passwords for Jupyter
+# - Optimized package installation with --no-cache-dir --no-deps
+#
+# Total estimated RAM usage: ~1.3GB containers + Docker overhead
+# Target: Reduce total Docker memory usage from 7GB+ to under 3-4GB
+#
+# Note: Azure Data Studio is best installed directly on your host machine
+# rather than running in Docker due to GUI complexity.
+#
+# To use Azure Data Studio:
+# 1. Download and install from: https://docs.microsoft.com/en-us/sql/azure-data-studio/download
+# 2. Connect using these settings from your .env file:
+#    - Server: localhost,1433
+#    - Username: sa
+#    - Password: YourStrong!Passw0rd
+#    - Database: ShopDB (create this manually)

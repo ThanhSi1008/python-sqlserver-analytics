@@ -1,214 +1,205 @@
-# Python + SQL Server Data Analysis Environment
+# Simple Database Connection Module
 
-A Docker-based development environment for data analysis using Python and SQL Server.
+## Installation and Usage
 
-## 🚀 Quick Start
-
-1. **Start the environment:**
-   ```bash
-   docker-compose up -d
-   ```
-
-2. **Access the Python container for interactive development:**
-   ```bash
-   docker exec -it python_data_analysis bash
-   ```
-
-3. **Run the test script:**
-   ```bash
-   docker exec -it python_data_analysis python test.py
-   ```
-
-4. **Access Jupyter Lab:**
-   Open **http://localhost:8888** in your browser
-
-## 📚 Jupyter Notebooks Available
-
-### 🎯 Ready-to-use Analysis Notebooks:
-
-1. **01_Database_Connection_and_Basic_Analysis.ipynb**
-   - Database connection and exploration
-   - Basic customer and product analysis
-   - Data visualization with matplotlib/seaborn
-
-2. **02_Advanced_Sales_Analysis.ipynb**
-   - VIP customer analysis
-   - Product performance analysis
-   - Time-based sales trends
-   - Customer segmentation (RFM Analysis)
-
-3. **03_Interactive_Dashboard_with_Plotly.ipynb**
-   - Interactive dashboards with Plotly
-   - 3D visualizations and treemaps
-   - Heatmaps and correlation analysis
-   - Export to HTML dashboards
-
-### 📖 Documentation:
-- **JUPYTER_GUIDE.md** - Comprehensive Vietnamese guide
-- **JUPYTER_QUICKSTART.md** - Quick start guide with examples
-
-## 🏗️ Architecture
-
-### Services
-
-- **sqlserver**: SQL Server 2022 Developer Edition
-  - Port: 1433
-  - SA Password: `YourStrong!Passw0rd`
-  - Database: `ShopDB`
-  - Data persistence via Docker volumes
-
-- **python-app**: Python 3.11 with data analysis packages
-  - Live code reloading via volume mounts
-  - Pre-installed packages: pandas, numpy, matplotlib, seaborn, pymssql, sqlalchemy
-  - Interactive development ready
-
-- **jupyter** (optional): Jupyter Lab for notebook-based analysis
-  - Port: 8888
-  - No authentication required (development only)
-
-### Network
-All containers communicate via the `data-analysis-network` bridge network.
-
-## 📁 Directory Structure
-
-```
-.
-├── app/                    # Python application code
-│   ├── Dockerfile         # Python container definition
-│   ├── test.py           # Sample test script
-│   ├── db_connection.py  # Database helper utilities
-│   └── data-script.sql   # Database initialization
-├── data/                  # Data files (mounted to containers)
-├── notebooks/            # Jupyter notebooks
-├── scripts/              # Additional Python scripts
-└── docker-compose.yml    # Docker Compose configuration
-```
-
-## 🔧 Development Workflow
-
-### 1. Interactive Python Development
-
+### 1. Start containers
 ```bash
-# Enter the Python container
-docker exec -it python_data_analysis bash
-
-# Run Python interactively
-python
-
-# Or run specific scripts
-python your_script.py
+docker-compose up -d
 ```
 
-### 2. Database Connection
-
-Use the provided `db_connection.py` helper:
-
+### 2. Use the module
 ```python
-from db_connection import get_db_connection
-import pandas as pd
+from db_connection import connect_to_database
 
 # Connect to database
-db = get_db_connection()
+conn = connect_to_database('database_name')
 
-# Query data into DataFrame
-df = db.query_to_dataframe("SELECT * FROM Customers")
-print(df.head())
+# Work with database
+cursor = conn.cursor()
+cursor.execute("SELECT COUNT(*) FROM Products")
+result = cursor.fetchone()
 
 # Close connection
-db.close()
+cursor.close()
+conn.close()
 ```
 
-### 3. Direct SQL Server Access
+## Configuration
 
-Connect from your host machine or other tools:
-- **Host**: localhost
-- **Port**: 1433
-- **User**: sa
-- **Password**: YourStrong!Passw0rd
-- **Database**: ShopDB
+### .env File
+```env
+# Database Connection
+DB_SERVER=sqlserver
+DB_PORT=1433
+DB_USER=sa
+DB_PASSWORD=YourStrong!Passw0rd
 
-### 4. Jupyter Notebooks
+# SQL Server Configuration
+ACCEPT_EULA=Y
+SA_PASSWORD=YourStrong!Passw0rd
+MSSQL_PID=Developer
+MSSQL_TCP_PORT=1433
+SQL_SERVER_HOST_PORT=1433
+```
 
-1. Start Jupyter service: `docker-compose up jupyter`
-2. Open http://localhost:8888
-3. Create notebooks in the `/notebooks` directory
+**Note:** No need for `DB_NAME` variable anymore since database name is passed directly to the function.
 
-## 📦 Pre-installed Python Packages
+## Project Structure
 
-### Database Connectivity
-- `pymssql` - SQL Server driver
-- `pyodbc` - ODBC database connectivity
-- `sqlalchemy` - SQL toolkit and ORM
+```
+statistics-docker/
+├── .env                    # Environment configuration
+├── docker-compose.yml     # Docker services definition
+├── README.md              # This file
+├── app/                   # Python code
+│   ├── Dockerfile         # Docker image for Python
+│   └── db_connection.py   # Database connection module
+└── notebooks/             # Jupyter notebooks
+    └── database_connection_example.ipynb  # Example notebook
+```
 
-### Data Analysis
-- `pandas` - Data manipulation and analysis
-- `numpy` - Numerical computing
-- `scipy` - Scientific computing
-- `scikit-learn` - Machine learning
+## API Reference
 
-### Visualization
-- `matplotlib` - Plotting library
-- `seaborn` - Statistical visualization
-- `plotly` - Interactive visualizations
+### `connect_to_database(database_name, username=None, password=None, server=None, port=None)`
 
-### Development Tools
-- `jupyter` / `jupyterlab` - Interactive notebooks
-- `watchdog` - File system monitoring
-- `python-dotenv` - Environment variable management
+Connect to SQL Server database.
 
-## 🔄 Live Code Reloading
+**Parameters:**
+- `database_name` (str): Database name to connect to (required)
+- `username` (str): SQL Server username (defaults to .env)
+- `password` (str): SQL Server password (defaults to .env)
+- `server` (str): Server address (defaults to .env)
+- `port` (int): Connection port (defaults to .env)
 
-The Python container automatically reflects changes made to files in the `./app` directory without requiring container rebuilds.
+**Returns:**
+- `pymssql.Connection`: Database connection object
 
-## 🗄️ Data Persistence
+**Examples:**
+```python
+# Use configuration from .env
+conn = connect_to_database('database_name')
 
-- SQL Server data is persisted in Docker volumes
-- Your code changes are immediately reflected via volume mounts
-- Database survives container restarts
+# Or specify connection details
+conn = connect_to_database(
+    database_name='database_name',
+    server='localhost',
+    port=1433,
+    username='sa',
+    password='my_password'
+)
+```
 
-## 🛠️ Useful Commands
+## Use in Jupyter Notebooks
+```python
+# In a Jupyter notebook cell
+from db_connection import connect_to_database
+import pandas as pd
 
+# Connect and read data into DataFrame
+conn = connect_to_database('database_name')
+df = pd.read_sql("SELECT * FROM sys.tables", conn)
+print(df)
+conn.close()
+```
+
+**Note**: The `db_connection` module is automatically available in Jupyter notebooks because the `/app` directory (containing `db_connection.py`) is mounted and set as the working directory.
+
+## Docker Services
+
+### SQL Server
+- **Container**: `sqlserver_data_analysis`
+- **Port**: `1433`
+- **Username**: `sa`
+- **Password**: From `.env` file
+
+### Python App
+- **Container**: `python_data_analysis`
+- **Libraries**: pymssql, pandas, numpy
+
+### Jupyter Lab
+- **Container**: `jupyter_data_analysis`
+- **URL**: http://localhost:8888
+- **Features**: Interactive notebooks with database access
+
+## Testing and Debug
+
+### Access Jupyter Lab
 ```bash
 # Start all services
 docker-compose up -d
 
-# View logs
-docker-compose logs -f python-app
-docker-compose logs -f sqlserver
-
-# Stop all services
-docker-compose down
-
-# Rebuild Python container (after Dockerfile changes)
-docker-compose build python-app
-
-# Access SQL Server directly
-docker exec -it sqlserver_data_analysis /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd'
-
-# Run a one-off Python command
-docker-compose run --rm python-app python -c "import pandas as pd; print(pd.__version__)"
+# Open Jupyter Lab in your browser
+open http://localhost:8888
 ```
 
-## 🔧 Environment Variables
+### Test specific connection
+```bash
+docker-compose exec python-app python -c "
+from db_connection import connect_to_database
+conn = connect_to_database('database_name')
+print('Connection successful!')
+conn.close()
+"
+```
 
-The following environment variables are available in the Python container:
+### Check containers
+```bash
+# View container status
+docker-compose ps
 
-- `DB_SERVER=sqlserver`
-- `DB_PORT=1433`
-- `DB_USER=sa`
-- `DB_PASSWORD=YourStrong!Passw0rd`
-- `DB_NAME=ShopDB`
-- `PYTHONUNBUFFERED=1`
-- `DEVELOPMENT_MODE=true`
+# View SQL Server logs
+docker-compose logs sqlserver
 
-## 📊 Sample Data
+# Enter Python container
+docker-compose exec python-app bash
+```
 
-The environment includes sample data with the following tables:
-- `Customers` - Customer information
-- `Products` - Product catalog
-- `Orders` - Order records
-- `OrderDetails` - Order line items
+## Create Database
 
-## 🚨 Security Note
+Use Azure Data Studio to create databases:
 
-This setup is designed for development only. The SQL Server uses a default password and has no authentication on Jupyter. Do not use in production environments.
+1. **Connect to SQL Server**:
+   - Server: `localhost,1433`
+   - Username: `sa`
+   - Password: `YourStrong!Passw0rd`
+
+2. **Create databases**:
+   ```sql
+   CREATE DATABASE database_name;
+   CREATE DATABASE StudentDB;
+   ```
+
+## Important Notes
+
+- **READ-ONLY**: This module is ONLY for reading data
+- **NO CREATE**: Does not automatically create databases or tables
+- **NO MODIFY**: No data modification functionality
+- **NO DELETE**: No data deletion functionality
+
+## Quick Start
+
+```bash
+# 1. Start services
+docker-compose up -d
+
+# 2. Open Jupyter Lab
+open http://localhost:8888
+
+# 3. Test connection in terminal
+docker-compose exec python-app python -c "
+from db_connection import connect_to_database
+conn = connect_to_database('database_name')
+print('Ready to work!')
+conn.close()
+"
+```
+
+**Module ready to use!** 
+
+### Getting Started with Jupyter Lab
+
+1. **Start the services**: `docker-compose up -d`
+2. **Open Jupyter Lab**: Navigate to http://localhost:8888 in your browser
+3. **Open the example notebook**: `notebooks/database_connection_example.ipynb`
+4. **Create databases**: Use Azure Data Studio to create your databases first
+5. **Start analyzing**: Use the `connect_to_database()` function in your notebooks

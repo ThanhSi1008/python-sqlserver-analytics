@@ -53,8 +53,5 @@ RUN pip install --no-cache-dir \
 # Set working directory
 WORKDIR /app
 
-# Create directories for organized development
-RUN mkdir -p /app/data /app/notebooks /app/scripts /app/output
-
 # Default command (can be overridden in docker-compose.yml)
 CMD ["python", "-c", "print('Python data analysis environment ready!'); import time; time.sleep(3600)"]
